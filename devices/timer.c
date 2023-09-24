@@ -93,8 +93,11 @@ timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
+  /*start -> 현재 시간, ticks -> 자는 시간 , start + ticks = 일어날 시간
+  */
+  	thread_sleep(start + ticks);//인자로 일어날 시간을 넣어줌
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -125,6 +128,7 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	thread_wake(ticks);
 	thread_tick ();
 }
 
