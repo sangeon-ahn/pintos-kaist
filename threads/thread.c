@@ -34,6 +34,9 @@ static struct thread *idle_thread;
 /* Initial thread, the thread running init.c:main(). */
 static struct thread *initial_thread;
 
+/*블럭된 리스트*/
+static struct list sleep_list;
+
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
@@ -109,7 +112,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-
+	list_init (&sleep_list);
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -244,6 +247,45 @@ thread_unblock (struct thread *t) {
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
+
+/*thread를 block_list에 넣는 함수*/
+void thread_sleep(int64_t ticks){
+  enum intr_level old_level;
+
+  old_level = intr_disable();
+  struct thread *cur = thread_current();
+  ASSERT(cur != idle_thread);
+
+  //일어날 시간 인자로 받은거
+  cur->wake_time = ticks;
+  list_push_back(&sleep_list, &cur->elem);
+  thread_block();
+
+  //인터럽트 킴
+  intr_set_level(old_level);
+
+}
+
+/*thread를 blocked_list에서 찾아 깨우는 함수*/
+void thread_wake(int64_t ticks){
+  
+  struct list_elem *list = list_begin(&sleep_list);//순회하려고 
+  struct thread *cur;
+
+  //깨울시간 확인 후 unblock
+  while(list != list_end(&sleep_list)){
+    cur = list_entry(list, struct thread, elem);//구조체의 주소값을 알고싶음
+    if(cur->wake_time <= ticks){ // 현 시간보다 thread의 일어날시간이 적으면
+      list = list_remove(list);//슬립리스트에서 제거
+      thread_unblock(cur);//언블락 시키고 레디 리스트에 넣어줌, 언블락에 포함되어있음
+    }
+    else{
+      list = list_next(list);//꺠울 시간이 안오면, 다음 슬립 리스트로
+    }
+  }
+}
+
+
 
 /* Returns the name of the running thread. */
 const char *
