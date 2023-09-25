@@ -66,7 +66,7 @@ static tid_t allocate_tid(void);
 // void make_thread_sleep(int64_t ticks);
 // void make_thread_wakeup(int64_t ticks);
 static bool tick_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
-
+static bool compare_pri(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -280,6 +280,16 @@ tick_less(const struct list_elem *a_, const struct list_elem *b_,
 
 	return a->thread_tick_count < b->thread_tick_count;
 }
+
+static bool
+compare_pri(const struct list_elem *a_, const struct list_elem *b_,
+		  void *aux UNUSED)
+{
+	const struct thread *a = list_entry(a_, struct thread, elem);
+	const struct thread *b = list_entry(b_, struct thread, elem);
+
+	return a->priority > b->priority;
+}
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -298,8 +308,8 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();			   // intr_disable return 값이 previous interrupt
 	ASSERT(t->status == THREAD_BLOCKED);   // thread blocked 상태면 다음 줄로 넘어감
-
-	list_push_back(&ready_list, &t->elem); // ready queue에 해당 스레드의 elem를 넣어줌
+	list_insert_ordered(&ready_list, &t -> elem, compare_pri, NULL);
+	//list_push_back(&ready_list, &t->elem); // ready queue에 해당 스레드의 elem를 넣어줌
 	t->status = THREAD_READY;			   // 상태를 ready로 바꾸고
 	intr_set_level(old_level);			   // 이전 인터럽트 상태로 원상복귀 시켜준다.
 }
