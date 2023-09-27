@@ -94,6 +94,11 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	int64_t thread_tick_count;
+	struct list_elem d_elem; 			/*donations 연결*/
+	struct list donations;				/*list of donors*/
+	int origin_priority;				/*original priority*/
+	struct list lock_list;				/*소유하고 있는 락의 리스트*/
+	struct lokc *waiting_lock;			/*현재 대기 중인 락의 정보*/
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -141,7 +146,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
 void do_iret (struct intr_frame *tf);
-
+void insert_donate(void);
+bool compare_pri(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool compare_pri_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 #endif /* threads/thread.h */

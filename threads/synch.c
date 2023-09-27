@@ -32,6 +32,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -74,7 +75,7 @@ sema_init (struct semaphore *sema, unsigned value) {
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
-
+   
 	ASSERT (sema != NULL);
 	ASSERT (!intr_context ());
 
@@ -83,7 +84,8 @@ sema_down (struct semaphore *sema) {
 	//현재 러닝 중인 스레드(자기자신)를 웨이트 리스트에 넣고 블락시킴
 	//해당 스레드는 블락 상태가 되고, 다른 스레드로 스케줄링이 됨
 	//sema_up이 호출되는 순간 웨이트 리스트에 있는 것들 중 맨앞에 있는 것을 unblock시키고 sema 값을 증가시킴
-		list_push_back (&sema->waiters, &thread_current ()->elem); //ELEM을 LIST의 끝에 삽입하여, 그것이 LIST의 마지막 요소가 된다.
+      list_push_back (&sema->waiters, &thread_current ()->elem); //ELEM을 LIST의 끝에 삽입하여, 그것이 LIST의 마지막 요소가 된다.
+
 		thread_block (); //
 	}
 	sema->value--; //value 감소 시키고
@@ -213,10 +215,55 @@ void
 lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
-	ASSERT (!lock_held_by_current_thread (lock));
+	ASSERT (!lock_held_by_current_thread (lock)); //현재 스레드가 락을 소유하고 있지 않아야함
 
-	sema_down (&lock->semaphore); //락안의 세마포어의 value를 down시킨다. -> wait리스트에 스레드를 넣고 block상태로 만든다
-	lock->holder = thread_current (); //현재 스레드가 lock을 가지고 있다.
+   if(lock -> holder == NULL) {
+      
+      sema_down (&lock->semaphore);
+      lock->holder = thread_current ();
+      
+      //락 리스트에 현재 소유한 락 정보 저장
+      if(list_empty(&(lock->holder->lock_list))){
+         list_push_front(&(lock->holder->lock_list), &lock->l_elem);
+      } else {
+         list_push_back(&(lock->holder->lock_list), &lock->l_elem);
+      }
+      
+   
+   } else { //
+      int MAX_pri;
+      
+      lock -> holder -> origin_priority = lock -> holder -> priority; //현재 락을 소유하고 있는 스레드의 원래 우선순위 정보 저장
+      thread_current () -> waiting_lock = &lock;
+
+      if (lock -> holder -> priority < thread_current() -> priority) {
+         list_push_back(&(lock->holder->donations), &thread_current() -> d_elem); //donations 리스트에 현재 스레드 추가
+
+         if (!list_empty(&(lock->holder->donations))) {
+            
+            struct list_elem *max_elem = list_max(&(lock->holder->donations), compare_pri_less, NULL);//donations 리스트에서 가장 높은 우선순위를 가진 스레드를 찾는다
+            struct thread *max_thread = list_entry(max_elem, struct thread, d_elem); 
+            
+            MAX_pri = max_thread->priority; //donations에서 가장 높은 우선순위를 가진 스레드의 우선순위를 저장
+            //1. donations의 스레드의 waiting_lock을 검사해서 현재 스레드의 waiting_lock과 같은 lock이 있다면 
+            //1.1 둘의 우선순위를 비교해 더 높은 우선순위를 donations에 저장한다.
+            //1.2 현재 스레드의 우선순위가 더 높다면 기존에 있던 스레드를 지우고, 현재 스레드를 추가하고
+            //1.3 현재 스레드의 우선순위가 더 낮다면 push하지 않는다.
+            //2. 같은 락이 없다면 바로 push
+            if (lock -> holder -> priority < MAX_pri) {
+               //락을 소유하고 있는 스레드의 현재 우선순위와 donations 리스트에서 찾은 최대 우선순위를 비교한다 
+               //donations리스트의 최대 우선순위가 락을 보유하고 있는 스레드의 현재 우선순위보다 높다면
+               lock -> holder -> priority = MAX_pri;//락을 보유하고 있는 스레드의 우선순위를 donations리스트의 최대 우선순위로 변경한다.
+         
+            }
+         }
+      } else {
+         
+         list_push_back(&(lock->semaphore.waiters), &thread_current() -> d_elem); //donations 리스트에 현재 스레드 추가
+      }
+      sema_down (&lock->semaphore);
+   }
+   
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -248,9 +295,40 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+   struct list_elem *next_e;
+   //릴리즈하려는 락과 관련된 donors가 donations에 있는지 확인
+   for(struct list_elem *e = list_begin(&(lock->holder->donations)); e != list_end(&(lock->holder->donations)); e = next_e) {
+      struct thread *t = list_entry(e, struct thread, d_elem);
+      if (t -> waiting_lock == lock) {
+         //있다면 -> 릴리즈하려는 락과 관련된 donors를 donations에서 삭제
+         next_e = list_next(e);
+         list_remove(e);
+         list_remove(&lock->l_elem);//lock_list에서 릴리즈하려는 락 제거
+         if (list_empty(&(lock->holder->lock_list))){//lock_list가 비어있는지 확인
+            //비어있다면 -> 더 이상 소유하고 있는 락이 없으므로 원래 우선 순위로 돌아감, 락 릴리즈, 세마업
+            lock->holder->priority = lock->holder->origin_priority;
+            
+         }
+         else {
+            if(!list_empty(&(lock->holder->donations))){
+               struct list_elem *max_elem = list_max(&(lock->holder->donations), compare_pri_less, NULL);//donations 리스트에서 가장 높은 우선순위를 가진 스레드를 찾는다
+               struct thread *max_thread = list_entry(max_elem, struct thread, d_elem); 
+               
+               lock -> holder -> priority = max_thread->priority; //donations에서 가장 높은 우선순위를 가진 스레드의 우선순위를 저장
+            }
+          
+         }
+         break;
 
-	lock->holder = NULL;
-	sema_up (&lock->semaphore);
+      } else{
+         next_e = list_next(e);
+      }
+      
+   }
+   lock->holder = NULL;
+   sema_up (&lock->semaphore);
+
+	
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -308,11 +386,12 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock)); //현재 스레드가 락을 보유한 상태면
 
-	sema_init (&waiter.semaphore, 0); //
-	list_push_back (&cond->waiters, &waiter.elem);
-	lock_release (lock);
-	sema_down (&waiter.semaphore);
-	lock_acquire (lock);
+	sema_init (&waiter.semaphore, 0); //waiter의 세마포어를 초기화하며, 초기 value는 0으로 설정
+	list_push_back (&cond->waiters, &waiter.elem);//waiter 원소를 cond의 waiters목록에 추가
+	lock_release (lock); //락 해제
+	sema_down (&waiter.semaphore); //waiter의 세마포어를 대기상태로 만든다. 
+   //조건 추가 :
+	lock_acquire (lock); //조건이 만족되면, 락을 다시 획득한다. 이전에 세마포어가 신호를 받아 대기상태에서 벗어났다면 이제 락을 다시 획득하려 시도한다.
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
@@ -321,7 +400,9 @@ cond_wait (struct condition *cond, struct lock *lock) {
 
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to signal a condition variable within an
-   interrupt handler. */
+   interrupt handler. 
+   함수가 조건변수(COND)에 대기하고 있는 스레드 중 하나를 깨우기 위해 사용된다.
+   함수를 호출하기 전에 락이 획득되어 있어야 하며, 인터럽트 핸들러 내에서는 이 함수를 사용하면 안된다.*/
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (cond != NULL);

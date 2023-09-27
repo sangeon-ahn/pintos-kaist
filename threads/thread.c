@@ -28,6 +28,7 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 static struct list blocked_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -62,11 +63,12 @@ static void init_thread(struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
-
+void insert_donate(void);
 // void make_thread_sleep(int64_t ticks);
 // void make_thread_wakeup(int64_t ticks);
 static bool tick_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
-static bool compare_pri(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool compare_pri(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool compare_pri_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -117,7 +119,10 @@ void thread_init(void)
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread();				  // running상태의 thread 구조체의 주소를 반환
+	
+	
 	init_thread(initial_thread, "main", PRI_DEFAULT); // 스레드를 초기화하고 초기 상태는 blocked 상태 -> running 상태로 바꿔줌
+	// list_init(&initial_thread->lock_list);
 	initial_thread->status = THREAD_RUNNING;		  // running 상태로 만들어줌 (아직 돌아가는건 아님)
 	initial_thread->tid = allocate_tid();			  // tid 부여
 }
@@ -218,6 +223,7 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t); // ready queue에 넣어준다.
+	thread_yield();
 
 	return tid;
 }
@@ -281,7 +287,7 @@ tick_less(const struct list_elem *a_, const struct list_elem *b_,
 	return a->thread_tick_count < b->thread_tick_count;
 }
 
-static bool
+bool
 compare_pri(const struct list_elem *a_, const struct list_elem *b_,
 		  void *aux UNUSED)
 {
@@ -290,6 +296,17 @@ compare_pri(const struct list_elem *a_, const struct list_elem *b_,
 
 	return a->priority > b->priority;
 }
+
+bool
+compare_pri_less(const struct list_elem *a_, const struct list_elem *b_,
+		  void *aux UNUSED)
+{
+	const struct thread *a = list_entry(a_, struct thread, elem);
+	const struct thread *b = list_entry(b_, struct thread, elem);
+
+	return a->priority < b->priority;
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -376,7 +393,8 @@ void thread_yield(void)
 
 	old_level = intr_disable();					  // 인터럽트 비활
 	if (curr != idle_thread)					  // idle thread면 ready 중인 스레드가 없다
-		list_push_back(&ready_list, &curr->elem); // ready queue에 넣는다.
+		list_insert_ordered(&ready_list, &curr -> elem, compare_pri, NULL);
+		// list_push_back(&ready_list, &curr->elem); // ready queue에 넣는다.
 	do_schedule(THREAD_READY);					  // 뺏기는 과정이 do_schedule 현재 running 중인 thread를 ready queue에 넣어주고, ready queue에 있는 스레드를 실행시킨다.
 	intr_set_level(old_level);					  // 이전 interuppt로 복구
 }
@@ -385,6 +403,24 @@ void thread_yield(void)
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
+	// int cur_pri = thread_current()->priority;
+	// cur_pri = new_priority;
+	// printf("%d\n", cur_pri);
+	//레디리스트랑 비교
+	//레디리스트의 가장 앞에있는 스레드의 우선순위 확인
+	if(list_empty(&ready_list)){
+		return;
+	}
+	struct thread *ready_front = list_entry(list_front(&ready_list), struct thread, elem);
+	int ready_front_pri = ready_front -> priority;
+	
+	//현재 메인 스레드의 우선순위와 비교
+	if (thread_current()->priority  < ready_front_pri) {
+		//현재 실행중인 스레드의 우선순위가 레디리스트의 우선순위보다 낮으면 yield
+		thread_yield();
+	} else {
+		return;
+	}
 }
 
 /* Returns the current thread's priority. */
@@ -479,7 +515,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	ASSERT(PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT(name != NULL);
 
-	memset(t, 0, sizeof *t);						   // 0으로 초기화하고
+	memset(t, 0, sizeof *t);		
+	list_init(&t->lock_list);				   // 0으로 초기화하고
+	list_init(&t->donations);
 	t->status = THREAD_BLOCKED;						   // blocked 상태로(맨처음 상태가 blocked 상태)
 	strlcpy(t->name, name, sizeof t->name);			   // 인자로 받은 이름을 스레드 이름으로 하는것
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *); // 스택 포인터 설정
