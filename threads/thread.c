@@ -69,6 +69,7 @@ void insert_donate(void);
 static bool tick_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 bool compare_pri(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 bool compare_pri_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool compare_pri_less_don(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -298,6 +299,15 @@ compare_pri(const struct list_elem *a_, const struct list_elem *b_,
 }
 
 bool
+compare_pri_less_don(const struct list_elem *a_, const struct list_elem *b_,
+		  void *aux UNUSED)
+{
+	const struct thread *a = list_entry(a_, struct thread, d_elem);
+	const struct thread *b = list_entry(b_, struct thread, d_elem);
+
+	return a->priority < b->priority;
+}
+bool
 compare_pri_less(const struct list_elem *a_, const struct list_elem *b_,
 		  void *aux UNUSED)
 {
@@ -522,6 +532,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	strlcpy(t->name, name, sizeof t->name);			   // 인자로 받은 이름을 스레드 이름으로 하는것
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *); // 스택 포인터 설정
 	t->priority = priority;
+	t -> origin_priority = priority;
+	t -> waiting_lock = NULL;
 	t->magic = THREAD_MAGIC; // 스택 오버플로우 판단하는 변수
 }
 
