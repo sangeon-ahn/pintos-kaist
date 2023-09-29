@@ -64,6 +64,7 @@ static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
 void insert_donate(void);
+void sort_ready_list(void);
 // void make_thread_sleep(int64_t ticks);
 // void make_thread_wakeup(int64_t ticks);
 static bool tick_less(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
@@ -723,3 +724,8 @@ allocate_tid(void)
 
 	return tid;
 }
+
+void
+sort_ready_list(void){
+	list_sort(&ready_list, compare_pri, NULL);
+} 

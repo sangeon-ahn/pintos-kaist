@@ -227,6 +227,8 @@ void lock_acquire(struct lock *lock)
    ASSERT(lock != NULL);
    ASSERT(!intr_context());
    ASSERT(!lock_held_by_current_thread(lock)); // 현재 스레드가 락을 소유하고 있지 않아야함
+   struct lock *temp;
+   struct thread *temp_t;
 
    if (lock->holder == NULL)
    {
@@ -241,44 +243,50 @@ void lock_acquire(struct lock *lock)
    }
    else
    {
-      if (lock->holder->priority < thread_current()->priority)
-      { // 현재 우선순위가 더 높아서 우선순위 기부를 해주어야함
-
-         if (!list_empty(&(lock->holder->donations)))
+      if (temp->holder->priority < temp_t->priority)
+      {                             // 현재 우선순위가 더 높아서 우선순위 기부를 해주어야함
+         temp_t = thread_current(); // 얘가 기부를 해줘야함
+         temp = lock;
+         thread_current()->waiting_lock = lock;
+         while (temp != NULL)
          {
-            // 1. donations의 스레드의 waiting_lock을 검사해서 현재 스레드의 waiting_lock과 같은 lock이 있다면
-
-            struct list_elem *e;
-            struct thread *t;
-            for (e = list_begin(&(lock->holder->donations)); e != list_end(&(lock->holder->donations)); e = list_next(e))
+            if (!list_empty(&(temp->holder->donations)))
             {
-               t = list_entry(e, struct thread, d_elem);
-               if (t->waiting_lock == lock)
+               // 1. donations의 스레드의 waiting_lock을 검사해서 현재 스레드의 waiting_lock과 같은 lock이 있다면
+
+               struct list_elem *e;
+               struct thread *t;
+               for (e = list_begin(&(temp->holder->donations)); e != list_end(&(temp->holder->donations)); e = list_next(e))
                {
-                  // 1.1 둘의 우선순위를 비교해 더 높은 우선순위를 donations에 저장한다.
-                  // 1.2 현재 스레드의 우선순위가 더 높다면
-                  list_remove(e); // 기존에 있던 스레드를 지우고, 현재 스레드를 추가하고
-                  list_push_back(&(lock->holder->donations), &thread_current()->d_elem);
-                  lock->holder->priority = thread_current()->priority;
-                  break;
+                  t = list_entry(e, struct thread, d_elem);
+                  if (t->waiting_lock == temp)
+                  {
+                     // 1.1 둘의 우선순위를 비교해 더 높은 우선순위를 donations에 저장한다.
+                     // 1.2 현재 스레드의 우선순위가 더 높다면
+                     list_remove(e); // 기존에 있던 스레드를 지우고, 현재 스레드를 추가하고
+                     list_push_back(&(temp->holder->donations), &temp_t->d_elem);
+                     temp->holder->priority = temp_t->priority;
+                     break;
+                  }
+               }
+               if (e == list_tail(&(temp->holder->donations)))
+               { // 2. 같은 락이 없다면 바로 push(e==tail 없다는거니까 바로 푸시)
+                  list_push_back(&(temp->holder->donations), &temp_t->d_elem);
+                  temp->holder->priority = temp_t->priority;
                }
             }
-            if (e == list_tail(&(lock->holder->donations)))
-            { // 2. 같은 락이 없다면 바로 push(e==tail 없다는거니까 바로 푸시)
-               list_push_back(&(lock->holder->donations), &thread_current()->d_elem);
-               lock->holder->priority = thread_current()->priority;
+            else
+            {
+               list_push_back(&(temp->holder->donations), &temp_t->d_elem); // donations 리스트에 현재 스레드 추가
+               temp->holder->priority = temp_t->priority;
             }
-         }
-         else
-         {
-            list_push_back(&(lock->holder->donations), &thread_current()->d_elem); // donations 리스트에 현재 스레드 추가
-            lock->holder->priority = thread_current()->priority;
+            temp_t = temp->holder;
+            temp = temp->holder->waiting_lock;
          }
       }
-      thread_current()->waiting_lock = lock;
-      sema_down(&lock->semaphore); //얘를 탈출하면 락을 가질수있는 상태가 되니까
+      sema_down(&lock->semaphore); // 얘를 탈출하면 락을 가질수있는 상태가 되니까
       lock->holder = thread_current();
-      list_push_back(&(lock->holder->lock_list), &lock -> l_elem);
+      list_push_back(&(lock->holder->lock_list), &lock->l_elem);
    }
 }
 
@@ -311,42 +319,42 @@ void lock_release(struct lock *lock)
 {
    ASSERT(lock != NULL);
    ASSERT(lock_held_by_current_thread(lock));
-
+   struct list_elem *e;
+   struct thread *t;
+   struct list_elem *max_elem;
+   struct thread *max_thread;
    // 릴리즈하려는 락과 관련된 donors가 donations에 있는지 확인
    if (!list_empty(&(lock->holder->donations)))
    {
-      for (struct list_elem *e = list_begin(&(lock->holder->donations)); e != list_end(&(lock->holder->donations)); e = list_next(e))
+      for (e = list_begin(&(lock->holder->donations)); e != list_end(&(lock->holder->donations)); e = list_next(e))
       {
-         struct thread *t = list_entry(e, struct thread, d_elem);
+         t = list_entry(e, struct thread, d_elem);
 
          if (t->waiting_lock == lock)
          {
             // 있다면 -> 릴리즈하려는 락과 관련된 donors를 donations에서 삭제
             list_remove(e);
             list_remove(&lock->l_elem); // donations 릴리즈하려는 락 제거
-            if (list_empty(&(lock->holder->donations)))
-            { // donations 비어있는지 확인
-               // 비어있다면 -> 더 이상 소유하고 있는 락이 없으므로 원래 우선 순위로 돌아감, 락 릴리즈, 세마업
-               lock->holder->priority = lock->holder->origin_priority;
-            }
-            else
-            {
-
-               struct list_elem *max_elem = list_max(&(lock->holder->donations), compare_pri_less_don, NULL); // donations 리스트에서 가장 높은 우선순위를 가진 스레드를 찾는다
-               struct thread *max_thread = list_entry(max_elem, struct thread, d_elem);
-
-               lock->holder->priority = max_thread->priority; // donations에서 가장 높은 우선순위를 가진 스레드의 우선순위를 저장
-            }
             break;
          }
       }
-      
+      if (list_empty(&(lock->holder->donations)))
+      {
+         lock->holder->priority = lock->holder->origin_priority;
+      }
+      else
+      {
+         max_elem = list_max(&(lock->holder->donations), compare_pri_less_don, NULL);
+         max_thread = list_entry(max_elem, struct thread, d_elem);
+         lock->holder->priority = max_thread->priority;
+      }
+
       
    }
-   
    lock->holder = NULL;
-      sema_up(&lock->semaphore);
-      thread_yield();
+   sema_up(&lock->semaphore);
+   sort_ready_list();
+   thread_yield();
 }
 
 /* Returns true if the current thread holds LOCK, false
