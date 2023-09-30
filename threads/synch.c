@@ -228,8 +228,8 @@ void lock_acquire(struct lock *lock)
    ASSERT(!intr_context());
    ASSERT(!lock_held_by_current_thread(lock)); // 현재 스레드가 락을 소유하고 있지 않아야함
 
-   struct lock *temp = thread_current();
-   struct thread *temp_t = lock;
+   struct lock *temp;
+   struct thread *temp_t;
 
    if (lock->holder == NULL)
    {
@@ -244,12 +244,19 @@ void lock_acquire(struct lock *lock)
    {
       if (lock->holder->priority < thread_current()->priority)
       { // 현재 우선순위가 더 높아서 우선순위 기부를 해주어야함
-
+         temp = lock;
+         temp_t = thread_current();
          // thread_current()->waiting_lock = lock;
 
          while (temp != NULL)
          {
-            if (!list_empty(&(temp->holder->donations)))
+            if (list_empty(&(temp->holder->donations)))
+            {
+               list_push_back(&(temp->holder->donations), &temp_t->d_elem); // donations 리스트에 현재 스레드 추가
+               temp->holder->priority = temp_t->priority;
+               
+            }
+            else
             {
                // 1. donations의 스레드의 waiting_lock을 검사해서 현재 스레드의 waiting_lock과 같은 lock이 있다면
                struct list_elem *e;
@@ -273,11 +280,6 @@ void lock_acquire(struct lock *lock)
                   list_push_back(&(temp->holder->donations), &temp_t->d_elem);
                   temp->holder->priority = temp_t->priority;
                }
-            }
-            else
-            {
-               list_push_back(&(temp->holder->donations), &temp_t->d_elem); // donations 리스트에 현재 스레드 추가
-               temp->holder->priority = temp_t->priority;
             }
             temp_t = temp->holder;
             temp = temp->holder->waiting_lock;
@@ -331,8 +333,6 @@ void lock_release(struct lock *lock)
          {
             // 있다면 -> 릴리즈하려는 락과 관련된 donors를 donations에서 삭제
             list_remove(e);
-            
-
             break;
          }
       }
