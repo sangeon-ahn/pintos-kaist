@@ -415,7 +415,7 @@ void cond_wait(struct condition *cond, struct lock *lock)
    ASSERT(lock_held_by_current_thread(lock)); // 현재 스레드가 락을 보유한 상태면
 
    sema_init(&waiter.semaphore, 0);              // waiter의 세마포어를 초기화하며, 초기 value는 0으로 설정
-   list_push_back(&cond->waiters, &waiter.elem); // waiter 원소를 cond의 waiters목록에 추가
+   list_insert_ordered(&cond->waiters, &waiter.elem, compare_pri, NULL); // waiter 원소를 cond의 waiters목록에 추가
    lock_release(lock);                           // 락 해제
    sema_down(&waiter.semaphore);                 // waiter의 세마포어를 대기상태로 만든다.
    // 조건 추가 :
