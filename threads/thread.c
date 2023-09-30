@@ -413,7 +413,9 @@ void thread_yield(void)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
+
 	thread_current()->priority = new_priority;
+	thread_current()->origin_priority = new_priority;
 	// int cur_pri = thread_current()->priority;
 	// cur_pri = new_priority;
 	// printf("%d\n", cur_pri);

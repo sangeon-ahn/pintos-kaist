@@ -138,10 +138,11 @@ void sema_up(struct semaphore *sema)
       t = list_entry(e, struct thread, elem);
       list_remove(e);
       thread_unblock(t); // 블락된 스레드를 러닝 상태로 바꿔줌
-
+      
    } // waiters에 thread가 있다면
 
    sema->value++; // sema 구조체에서 value를 ++
+   thread_yield();
    intr_set_level(old_level);
 }
 
@@ -353,7 +354,7 @@ void lock_release(struct lock *lock)
    list_remove(&lock->l_elem); // donations 릴리즈하려는 락 제거
    lock->holder = NULL;
    sema_up(&lock->semaphore);
-   thread_yield();
+   // thread_yield();
 }
 
 /* Returns true if the current thread holds LOCK, false
