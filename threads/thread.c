@@ -400,6 +400,7 @@ void thread_yield(void)
 	old_level = intr_disable(); // 인터럽트 비활
 	if (curr != idle_thread)	// idle thread면 ready 중인 스레드가 없다
 		list_insert_ordered(&ready_list, &curr->elem, compare_pri, NULL);
+		sort_ready_list();
 	// list_push_back(&ready_list, &curr->elem); // ready queue에 넣는다.
 	do_schedule(THREAD_READY); // 뺏기는 과정이 do_schedule 현재 running 중인 thread를 ready queue에 넣어주고, ready queue에 있는 스레드를 실행시킨다.
 	intr_set_level(old_level); // 이전 interuppt로 복구

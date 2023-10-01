@@ -136,6 +136,7 @@ void sema_up(struct semaphore *sema)
    {
       e = list_max(&sema->waiters, compare_pri_less, NULL);
       t = list_entry(e, struct thread, elem);
+      // printf("\nwaiters list max : %s\n", t->name);
       list_remove(e);
       thread_unblock(t); // 블락된 스레드를 러닝 상태로 바꿔줌
       
@@ -285,6 +286,7 @@ void lock_acquire(struct lock *lock)
             temp_t = temp->holder;
             temp = temp->holder->waiting_lock;
          }
+         // sort_ready_list();
       }
       thread_current()->waiting_lock = lock;
       sema_down(&lock->semaphore); // 얘를 탈출하면 락을 가질수있는 상태가 되니까
@@ -374,7 +376,19 @@ struct semaphore_elem
    struct list_elem elem;      /* List element. */
    struct semaphore semaphore; /* This semaphore. */
 };
+bool compare_cond_waiters(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+   const struct semaphore_elem *a = list_entry(a_, struct semaphore_elem, elem);
+	const struct semaphore_elem *b = list_entry(b_, struct semaphore_elem, elem);
 
+   struct list_elem *a_max = list_max(&a -> semaphore.waiters, compare_pri_less, NULL);
+   struct list_elem *b_max = list_max(&b -> semaphore.waiters, compare_pri_less, NULL);
+
+   struct thread *a_t = list_entry(a_max, struct thread, elem);
+   struct thread *b_t = list_entry(b_max, struct thread, elem);
+
+	return a_t->priority > b_t->priority;
+}
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -415,12 +429,15 @@ void cond_wait(struct condition *cond, struct lock *lock)
    ASSERT(lock_held_by_current_thread(lock)); // 현재 스레드가 락을 보유한 상태면
 
    sema_init(&waiter.semaphore, 0);              // waiter의 세마포어를 초기화하며, 초기 value는 0으로 설정
-   list_insert_ordered(&cond->waiters, &waiter.elem, compare_pri, NULL); // waiter 원소를 cond의 waiters목록에 추가
+   list_insert_ordered(&cond->waiters, &waiter.elem, compare_cond_waiters, NULL); // waiter 원소를 cond의 waiters목록에 추가
+   
    lock_release(lock);                           // 락 해제
    sema_down(&waiter.semaphore);                 // waiter의 세마포어를 대기상태로 만든다.
    // 조건 추가 :
    lock_acquire(lock); // 조건이 만족되면, 락을 다시 획득한다. 이전에 세마포어가 신호를 받아 대기상태에서 벗어났다면 이제 락을 다시 획득하려 시도한다.
 }
+
+
 
 /* If any threads are waiting on COND (protected by LOCK), then
    this function signals one of them to wake up from its wait.
@@ -439,9 +456,11 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
    ASSERT(lock_held_by_current_thread(lock));
 
    if (!list_empty(&cond->waiters))
+      list_sort(&cond->waiters, compare_cond_waiters, NULL);
       sema_up(&list_entry(list_pop_front(&cond->waiters),
                           struct semaphore_elem, elem)
                    ->semaphore);
+      
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
