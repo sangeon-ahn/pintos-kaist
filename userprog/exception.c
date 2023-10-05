@@ -15,7 +15,7 @@ static void page_fault (struct intr_frame *);
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
-   In a real Unix-like OS, most of these interrupts would be
+   In a real Unix-like OS, most of these interㅋ레rupts would be
    passed along to the user process in the form of signals, as
    described in [SV-386] 3-24 and 3-25, but we don't implement
    signals.  Instead, we'll make them simply kill the user
