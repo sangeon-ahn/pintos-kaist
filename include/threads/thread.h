@@ -28,6 +28,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define FDT_PAGES 3
+#define FDT_COUNT_LIMIT FDT_PAGES *(1<<9)
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -113,9 +116,17 @@ struct thread {
 	int priority;                       /* Priority. */
 	int64_t thread_tick_count;
 	/* 쓰레드 디스크립터 필드 추가 */
+
+	/*------project2------*/
+	int exit_status; //exit(), wait()할때 사용
+	struct file **file_dt; //파일 디스크립터 테이블
+	int fdidx; //해당 파일에 대한 인덱스 값을 넣기 위한 용도
 	
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

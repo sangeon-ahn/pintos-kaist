@@ -37,13 +37,13 @@ syscall_entry:
 	push %r14
 	push %r15
 	movq %rsp, %rdi
-
+ /*시스콜을 호출전의 상태를 스택에 저장하는 부분*/
 check_intr:
 	btsq $9, %r11          /* Check whether we recover the interrupt */
 	jnb no_sti
 	sti                    /* restore interrupt */
 no_sti:
-	movabs $syscall_handler, %r12
+	movabs $syscall_handler, %r12   /*%r12 레지스터에 저장된 시스템 콜 핸들러 주소를 호출합니다. 이로써 커널 모드로 전환하여 시스템 콜을 실행합니다.*/
 	call *%r12
 	popq %r15
 	popq %r14
@@ -60,13 +60,13 @@ no_sti:
 	popq %rcx
 	popq %rbx
 	popq %rax
-	addq $32, %rsp
+	addq $32, %rsp //이상한거 넘어가려고
 	popq %rcx              /* if->rip */
 	addq $8, %rsp
 	popq %r11              /* if->eflags */
 	popq %rsp              /* if->rsp */
 	sysretq
-
+/*호출이 끝나고 스택에 넣어놨던 상태들을 다시 레지스터에게 넣는것*/
 .section .data
 .globl temp1
 temp1:

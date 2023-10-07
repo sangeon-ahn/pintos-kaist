@@ -511,7 +511,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);//스레드 스택 포인터
 	t->priority = priority; //스레드 우선순위 설정 빼면, 스레드가 생성될떄 우선순위가 초기화 되지 않아 임의의 값을 가지게 되어 초기화해야됨
 	t->magic = THREAD_MAGIC;//스레드 마법번호 설정
-
+	t->exit_status = 0;
+	
 	t->init_priority = priority;//초기 우선순위 설정
 	/* Donate*/
 	t->wait_on_lock = NULL;//스레득 대기 중인 락 초기화
