@@ -33,7 +33,7 @@ int exit_(int status);
 #define MSR_STAR 0xc0000081			/* Segment selector msr */
 #define MSR_LSTAR 0xc0000082		/* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
-
+#define FDCOUNT_LIMIT 
 void syscall_init(void)
 {
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48 |
@@ -55,17 +55,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	switch (f->R.rax)
 	{
 	case SYS_HALT: // power off! 핀토스를 종료, 강종 느낌
-	{
 		power_off();
 		break;
-	}
 	case SYS_EXIT:
 		// 유저: exit(EXIT_NUM, status) 호출
-		f->R.rax = f->R.rdi;
 		// 프로세스 디스크립터에 exit_status값 저장
-		// curr_t == child
 		curr_t->exit_status = f->R.rdi;
-		int child_pid = curr_t->tid;
 		// curr_t->parent_p->dead_child[child_pid] = curr_t->exit_status; // dead_threads 배열에는 자식 쓰레드의 exit_status가 들어간다.
 		printf("%s: exit(%d)\n", curr_t->name, f->R.rdi);
 		thread_exit();
@@ -197,3 +192,9 @@ int write_(int fd, void *buffer, unsigned size)
 // 	//cmd_line : 새로운 프로세스에 실행할 프로그램 명령어
 // 	//메모리 탑재 성공시 유저 프로그램 실행, 실패시 스레드 종료
 // }
+
+struct file *fd_to_struct_filep(int d){
+	if(fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return NULL;
+	}
+}

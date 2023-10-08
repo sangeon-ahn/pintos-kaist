@@ -100,7 +100,15 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
 	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, curr);
 	// block
-	sema_down(&curr->fork_sema);
+	if(pid == TID_ERROR){
+		return TID_ERROR;
+	}
+
+	struct thread *child = get_child_with_pid(pid);
+	sema_down(&child->fork_sema);
+	if(child -> exit_status == -1) {
+		return TID_ERROR;
+	}
 	return pid;
 }
 
@@ -779,6 +787,24 @@ int process_add_file(struct file *f)
 
 	return curr->next_fd;
 }
+
+struct thread *get_child_with_pid(int tid){
+	struct thread *cur = thread_current();
+	struct list *child_list = &cur->child_list;
+
+#ifdef DEBUG_WAIT
+	printf("\npratent children # : %d\n", list_size(child_list));
+#endif
+	for(struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, c_elem);
+		if(t -> tid == tid){
+			return t;
+		}
+		return NULL;
+	}
+
+	}
 #else
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
