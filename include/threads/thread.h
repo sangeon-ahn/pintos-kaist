@@ -31,7 +31,14 @@ typedef int tid_t;
 #define PRI_MAX 63	   /* Highest priority. */
 /*init exit_status*/
 #define INIT_EXIT_STATUS 99999
+/* ------------------ project2 -------------------- */
+#define FDT_PAGES 3		/* pages to allocate for file descriptor tables (thread_create, process_exit) */
+#define FDCOUNT_LIMIT FDT_PAGES *(1 << 9)		/* limit fd_idx */
+/* ------------------------------------------------ */
+
 /* A kernel thread or user process.
+
+
  *
  * Each thread structure is stored in its own 4 kB page.  The
  * thread structure itself sits at the very bottom of the page
@@ -110,11 +117,13 @@ struct thread
 	int exit_status;		 // 프로그램의 종료 상태를 나타내는 멤버
 	struct thread *parent_p; // 부모 프로세스 디스크립터 포인터 필드
 	struct file **file_dt;	 // 파일 디스크립터 테이블
+	struct file *running;
 	int fdidx;				 // 해당 파일에 대한 인덱스 값을 넣기 위한 용도
 	int next_fd;			 // 다음 파일 디스크립터 정보(number) 1씩 증가
 	struct semaphore fork_sema;
 	struct intr_frame tf_for_syscall;
 	struct semaphore wait_process_sema;
+	struct semaphore free_sema;
 	// int dead_child[100];				//왜 100? 몰라!
 	struct list child_info_list; //
 

@@ -100,13 +100,15 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
 	tid_t pid = thread_create(name, PRI_DEFAULT, __do_fork, curr);
 	// block
-	if(pid == TID_ERROR){
+	if (pid == TID_ERROR)
+	{
 		return TID_ERROR;
 	}
 
 	struct thread *child = get_child_with_pid(pid);
 	sema_down(&child->fork_sema);
-	if(child -> exit_status == -1) {
+	if (child->exit_status == -1)
+	{
 		return TID_ERROR;
 	}
 	return pid;
@@ -323,58 +325,19 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 	struct thread *cur = thread_current(); // 아마도 부모 프로세스
-	struct list_elem *e;
-	struct thread *t;
-	enum intr_level prev_level;
-	// 일단 자식 프로세스의 exit_status가져오자 -> if문 안에서 하면 될듯?
-	// 일단 for문으로 쭉 돌면서 찾기
-	
-	// ASSERT(!list_empty(&cur->child_list));
-	// prev_level = intr_disable();
-	if(list_empty(&cur->child_list)){
-		//만약 child_list에 자식 쓰레드가 없다면, 이미 해당 자식은 죽었다는 의미이다.
-		//이 경우에는 dead_threads[자식 쓰레드의 tid]에 이미 자식이 자신의 exit_status를 넣어주었기 때문에 block에 들어가지 말고 이 값을 바로 리턴해준다.
-		// return cur->dead_child[child_tid];
-	}
-	for (e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
+	struct thread *child = get_child_with_pid(child_tid);
+
+	if (child == NULL)
 	{
-		t = list_entry(e, struct thread, c_elem);
-		if (t->tid == child_tid)
-		{
-			break;
-		}
-	}
-	
-	
-	// 그 전에
-	// child_tid ==  자식 프로세스의 pid(struct thread 의 pid참고)
-	
-	// 자식 프로세스가 종료되면 sema_up해줌->부모 프로세스 readylist에 추가됨 -> 마지막에 sema_up? -> 이건 process_exit에서 해줌
-	while (t->exit_status == INIT_EXIT_STATUS)
-	{
-		// 1.자식 프로세스가 종료될때까지 부모 프로세스는 대기
-		// 자식 프로세스의 exit_status를 가져와서 종료상태를 반환받을때까지 부모 프로세스는 대기 상태 진입 -> sema_down
-		//->waitlist에 추가됨
-		sema_down(&t->wait_process_sema);
-		// 5.호출한 프로세스의 자식이 아니라면
-		// 부모 프로세스의 child_list를 탐색해서 현재 child_tid와 같은 프로세스가 없다면, 호출한 프로세스의 자식이 아님
-		// for문으로 탐색하고, 만약 list_tail까지 왔다면 호출한 프로세스의 자식이 아니니까 return -1
-		// 2.종료 상태를 반환한다
-	}
-	// intr_set_level(prev_level);
-	if (t->exit_status == TID_ERROR)
-	{
-		
-		return -1;
-	}
-	else
-	{
-		return t->exit_status;
+		return -1
 	}
 
-	// 자식 프로세스가 정상적으로 종료시(exit_status == 0이면 프로세스 디스크립터를 제거(이게 무슨 말이지?))
-	// exit_status값 리턴,
-	// 비 정상적으로 종료(kill()일 경우 -1리턴 -> kill()이 실행되었을때 무엇을 리턴하는지 확인하기)
+	sema_down(&child->wait_process_sema);
+	int exit_status = child->exit_status;
+
+	list_remove(&child->c_elem);
+	sema_up(&child->free_sema);
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -385,29 +348,20 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	struct list_elem *e;
-	struct thread *t;
-	struct list_elem *del_child;
-	// ASSERT(!list_empty(&cur->child_list));
-	// if(cur->parent_p == NULL){//main일때
-	// 	while(!list_empty(&cur->child_list)){
-	// 	list_pop_front(&cur->child_list);
-	// 	}
+
+	// for (int i = 0; i < FDCOUNT_LIMIT; i++)
+	// {
+	// 	close(i);
 	// }
-	// else if(list_empty(&cur->child_list)){
-	// 	//자식이야
-		
-	// }
-	//부모가 있는지 없는지 확인
-	if(cur->parent_p == NULL){
-		sema_up(&cur->wait_process_sema);
-		process_cleanup();
-	} else{
-		list_remove(&cur -> c_elem);			//뒤지니까 자식 리스트에서 삭제	
-		sema_up(&cur->wait_process_sema);
-		process_cleanup();
-	}
-	
+	// palloc_free_page(cur->fdTable); 
+	// thread_create 에서 할당했던 fdt 공간을 해제해준다
+	palloc_free_multiple(cur->file_dt, FDT_PAGES);
+	file_close(cur->running);
+	// 부모가 있는지 없는지 확인
+	sema_up(&cur->wait_process_sema);
+	// 뒤지니까 자식 리스트에서 삭제
+	sema_up(&cur->free_sema);
+	process_cleanup();
 }
 
 /* Free the current process's resources. */
@@ -788,24 +742,25 @@ int process_add_file(struct file *f)
 	return curr->next_fd;
 }
 
-struct thread *get_child_with_pid(int tid){
-	
+struct thread *get_child_with_pid(int tid)
+{
+
 	struct thread *cur = thread_current();
 	struct list *child_list = &cur->child_list;
 
 #ifdef DEBUG_WAIT
 	printf("\npratent children # : %d\n", list_size(child_list));
 #endif
-	for(struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
+	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, c_elem);
-		if(t -> tid == tid){
+		if (t->tid == tid)
+		{
 			return t;
 		}
 		return NULL;
 	}
-
-	}
+}
 #else
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
