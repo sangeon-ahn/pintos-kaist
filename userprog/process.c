@@ -329,7 +329,7 @@ int process_wait(tid_t child_tid UNUSED)
 
 	if (child == NULL)
 	{
-		return -1
+		return -1;
 	}
 
 	sema_down(&child->wait_process_sema);
@@ -356,7 +356,7 @@ void process_exit(void)
 	// palloc_free_page(cur->fdTable); 
 	// thread_create 에서 할당했던 fdt 공간을 해제해준다
 	palloc_free_multiple(cur->file_dt, FDT_PAGES);
-	file_close(cur->running);
+	// file_close(cur->running);
 	// 부모가 있는지 없는지 확인
 	sema_up(&cur->wait_process_sema);
 	// 뒤지니까 자식 리스트에서 삭제

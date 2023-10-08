@@ -113,7 +113,6 @@ struct thread
 	/*-------------------project2------------------------------*/
 	struct list child_list;	 // fork 할때마다 child 리스트에 추가가 되는건지, 정렬해야하는지, child list의 child에도 우선순위가 있는지
 	struct list_elem c_elem; // child list elem
-	int create_flag;		 // 성공적으로 자식 프로세스를 생성시켰는지 확인하는 플래그
 	int exit_status;		 // 프로그램의 종료 상태를 나타내는 멤버
 	struct thread *parent_p; // 부모 프로세스 디스크립터 포인터 필드
 	struct file **file_dt;	 // 파일 디스크립터 테이블
@@ -121,11 +120,9 @@ struct thread
 	int fdidx;				 // 해당 파일에 대한 인덱스 값을 넣기 위한 용도
 	int next_fd;			 // 다음 파일 디스크립터 정보(number) 1씩 증가
 	struct semaphore fork_sema;
-	struct intr_frame tf_for_syscall;
+	struct intr_frame parent_if;
 	struct semaphore wait_process_sema;
 	struct semaphore free_sema;
-	// int dead_child[100];				//왜 100? 몰라!
-	struct list child_info_list; //
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

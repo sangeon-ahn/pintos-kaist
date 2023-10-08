@@ -622,19 +622,20 @@ init_thread(struct thread *t, const char *name, int priority)
 	memset(t, 0, sizeof *t);						   // 0으로 초기화하고
 	list_init(&t->donations);
 	list_init(&t->lock_list);
-	list_init(&t->child_list);							//자식 프로세스 리스트 초기화
-	list_init(&t->child_info_list);
-	// for(int j = 0;j<128;j++){
-	// 	t->file_dt[j] = NULL;
-	// }
+								//자식 프로세스 리스트 초기화
+	
 	t->status = THREAD_BLOCKED;						   // blocked 상태로(맨처음 상태가 blocked 상태)
 	strlcpy(t->name, name, sizeof t->name);			   // 인자로 받은 이름을 스레드 이름으로 하는것
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *); // 스택 포인터 설정
 	t->priority = priority;
 	t->magic = THREAD_MAGIC; // 스택 오버플로우 판단하는 변수
-	t->exit_status = INIT_EXIT_STATUS;
+	/*project 2*/
+	t->exit_status = 0;
+	list_init(&t->child_list);
 	sema_init(&t->wait_process_sema, 0);
+	sema_init(&t->free_sema, 0);
 	sema_init(&t->fork_sema, 0);
+	t->running = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
