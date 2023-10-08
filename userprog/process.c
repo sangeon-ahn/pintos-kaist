@@ -326,7 +326,7 @@ int process_wait(tid_t child_tid UNUSED)
 	if(list_empty(&cur->child_list)){
 		//만약 child_list에 자식 쓰레드가 없다면, 이미 해당 자식은 죽었다는 의미이다.
 		//이 경우에는 dead_threads[자식 쓰레드의 tid]에 이미 자식이 자신의 exit_status를 넣어주었기 때문에 block에 들어가지 말고 이 값을 바로 리턴해준다.
-		return cur->dead_child[child_tid];
+		// return cur->dead_child[child_tid];
 	}
 	for (e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
 	{
@@ -372,7 +372,7 @@ int process_wait(tid_t child_tid UNUSED)
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void)
 {
-	struct thread *cur = thread_current(); // 종료 전이니까 자식 프로세스임
+	struct thread *cur = thread_current();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
@@ -390,10 +390,16 @@ void process_exit(void)
 	// 	//자식이야
 		
 	// }
+	//부모가 있는지 없는지 확인
+	if(cur->parent_p == NULL){
+		sema_up(&cur->wait_process_sema);
+		process_cleanup();
+	} else{
+		list_remove(&cur -> c_elem);			//뒤지니까 자식 리스트에서 삭제	
+		sema_up(&cur->wait_process_sema);
+		process_cleanup();
+	}
 	
-	list_remove(&cur -> c_elem);					//뒤지니까 자식 리스트에서 삭제
-	sema_up(&cur->wait_process_sema);
-	process_cleanup();
 }
 
 /* Free the current process's resources. */

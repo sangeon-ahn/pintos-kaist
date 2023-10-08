@@ -66,7 +66,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		// curr_t == child
 		curr_t->exit_status = f->R.rdi;
 		int child_pid = curr_t->tid;
-		curr_t->parent_p->dead_child[child_pid] = curr_t->exit_status; // dead_threads 배열에는 자식 쓰레드의 exit_status가 들어간다.
+		// curr_t->parent_p->dead_child[child_pid] = curr_t->exit_status; // dead_threads 배열에는 자식 쓰레드의 exit_status가 들어간다.
 		printf("%s: exit(%d)\n", curr_t->name, f->R.rdi);
 		thread_exit();
 		break;

@@ -11,7 +11,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
-
+//malloc 선언
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -198,6 +198,7 @@ tid_t thread_create(const char *name, int priority,
 	struct thread *t;
 	tid_t tid;
 	struct thread *parent = thread_current();
+	struct child_info *new_child_info = malloc(sizeof(struct child_info));
 	//function 인자는 thread가 생성되고 이 스레드가 시작할때 실행할 함수이다.
 	ASSERT(function != NULL); //유효한 함수 포인터를 가리키고 있어야 한다
 
@@ -224,6 +225,8 @@ tid_t thread_create(const char *name, int priority,
 	//부모 프로세스를 현재 생성된 프로세스의 구조체에 저장해준다
 	//부모 프로세스는 현재 러닝중인 스레드인가?? -> 맞다!
 	list_push_back(&parent -> child_list, &t->c_elem);
+	list_push_back(&parent -> child_info_list, &new_child_info->i_elem);
+
 	if(t->tid == 1){
 		t->parent_p = NULL;
 	}
@@ -620,9 +623,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->donations);
 	list_init(&t->lock_list);
 	list_init(&t->child_list);							//자식 프로세스 리스트 초기화
-	for(int i = 0;i<100;i++){
-		t->dead_child[i] = INIT_EXIT_STATUS;
-	}
+	list_init(&t->child_info_list);
 	// for(int j = 0;j<128;j++){
 	// 	t->file_dt[j] = NULL;
 	// }
@@ -763,7 +764,7 @@ do_schedule(int status)
 		int victim_tid = victim -> tid;
 		//insert dead list
 		//자식 쓰레드가 destruction_req[]에 들어간 후, dead_threads[자식의 tid]에 자식의 exit_status를 넣는다.
-		victim -> parent_p -> dead_child[victim_tid] = victim -> exit_status; 
+		// victim -> parent_p -> dead_child[victim_tid] = victim -> exit_status; 
 		palloc_free_page(victim); // 희생자들을 page free 시킨다
 	}
 	thread_current()->status = status;
