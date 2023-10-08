@@ -12,15 +12,15 @@
 #include "threads/init.h"
 #include "include/devices/input.h"
 #include "include/filesys/filesys.h"
-#include "/home/ubuntu/pintos-kaist/filesys/file.c"
-#include "/home/ubuntu/pintos-kaist/include/lib/kernel/stdio.h" //pubuf 호츌
+#include "filesys/file.h"
+#include "threads/synch.h"
+// #include "/home/ubuntu/pintos-kaist/include/lib/kernel/stdio.h" //pubuf 호츌
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 void check_address(void *addr);
 
-
-
+struct lock filesys_lock;
 
 /* System call.
  *
@@ -40,13 +40,23 @@ void check_address(void *addr);
 #define STDOUT_FILENO 1 //출력
 
 
-
+void halt(void);
 void exit (int status);
 bool create (const char *file, unsigned initial_size);
 bool remove (const char *file);
 
 int read(int fd, void *buffer, unsigned size);
 void seek(int fd, unsigned position);
+unsigned tell (int fd);
+void close (int fd);
+void seek (int fd, unsigned position);
+// int write(int fd, void *buffer, unsigned size);
+int write(int fd, const void* buffer, unsigned int size);
+
+// static struct file *process_get_file(int fd);
+static struct file *process_get_file(int fd);
+int process_add_file(struct file *f);
+void process_close_file (int fd);
 
 void
 syscall_init (void) {
@@ -59,66 +69,60 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	lock_init(&filesys_lock);
 }
 
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
+	/* 유저 스택에 저장되어 있는 시스템 콜 넘버를 가져와야지 일단 */
+	int sys_number = f->R.rax; // rax: 시스템 콜 넘버
+    /* 
+	인자 들어오는 순서:
+	1번째 인자: %rdi
+	2번째 인자: %rsi
+	3번째 인자: %rdx
+	4번째 인자: %r10
+	5번째 인자: %r8
+	6번째 인자: %r9 
+	*/
 	// TODO: Your implementation goes here.
-	int syscall_num = f->R.rax; //rax에는 시스콜 넘버가 들어있음
-
-	switch (syscall_num)
-	{
-	case SYS_HALT:
-		power_off();
-		break;
-	case SYS_EXIT:  
-		exit(f->R.rdi);
-		break;
-	case SYS_FORK:      
-		//fork(f->R.rdi);
-		break;
-	case SYS_EXEC:      
-		//exec(f->R.rdi);
-		break;
-	case SYS_WAIT:      
-		//wait(f->R.rdi);
-		break;
-	case SYS_CREATE:      
-		create(f->R.rdi,f->R.rsi);
-		break;
-	case SYS_REMOVE:      
-		remove(f->R.rdi);
-		break;
-	case SYS_OPEN:      
-		//open(f->R.rdi);	
-		break;
-	case SYS_FILESIZE:      
-		//filesize(f->R.rdi);
-		break;
-	case SYS_READ:
-	/*buffer 안에 fd 로 열려있는 파일로부터 size 바이트를 읽습니다. 
-	실제로 읽어낸 바이트의 수 를 반환합니다 (파일 끝에서 시도하면 0). 
-	파일이 읽어질 수 없었다면 -1을 반환합니다.(파일 끝이라서가 아닌 다른 조건에 때문에 못 읽은 경우)  */     
-		//read(f->R.rdi, f->R.rsi, f->R.rdx);
-		break;
-    case SYS_WRITE:
-        write(f->R.rdi, f->R.rsi, f->R.rdx);
-        break;
-	case SYS_SEEK:      
-		//seek(f->R.rdi, f->R.rsi);
-		break;
-	case SYS_TELL:      
-		//tell(f->R.rdi);	
-		break;
-	case SYS_CLOSE:      
-		//close(f->R.rdi);
-		break;
-	default:
-		break;
+	switch(sys_number) {
+		case SYS_HALT:
+			halt();
+		case SYS_EXIT:
+			exit(f->R.rdi);
+		case SYS_FORK:
+			//fork(f->R.rdi);		
+		case SYS_EXEC:
+			//exec(f->R.rdi);
+		case SYS_WAIT:
+			//wait(f->R.rdi);
+		case SYS_CREATE:
+			create(f->R.rdi, f->R.rsi);		
+		case SYS_REMOVE:
+			remove(f->R.rdi);		
+		case SYS_OPEN:
+			open(f->R.rdi);		
+		case SYS_FILESIZE:
+			filesize(f->R.rdi);
+		case SYS_READ:
+			read(f->R.rdi, f->R.rsi, f->R.rdx);
+		case SYS_WRITE:
+			write(f->R.rdi, f->R.rsi, f->R.rdx);		
+		case SYS_SEEK:
+			//seek(f->R.rdi, f->R.rsi);		
+		case SYS_TELL:
+			//tell(f->R.rdi);		
+		case SYS_CLOSE:
+			//close(f->R.rdi);	
 	}
-	//printf ("system call!\n");
-	//thread_exit ();
+	// printf ("system call!\n");
+	// thread_exit ();
+}
+/* pintos 종료시키는 함수 */
+void halt(void){
+	power_off();
 }
 
 void exit (int status) {
@@ -144,71 +148,129 @@ bool remove (const char *file) {
 		return false;
 }
 
+/*-------파일디스크립터 함수--------*/
+int open (const char *file) {
+	check_address(file); // 먼저 주소 유효한지 늘 체크
+	struct file *f =filesys_open(file);
+	int fd = process_add_file(f);
+
+	if(f ==NULL)
+		return -1;
+	if (fd == -1)
+		file_close(f);
+	return fd;
+}
+
+int filesize(int fd){
+	struct file *f = process_get_file(fd);
+	if (f == NULL) return -1;
+	return file_length(f);
+}
 
 /*
 #define STDIN_FILENO 0 //입력
 #define STDOUT_FILENO 1 //출력
+fd가 STDIN에 해당하는 경우엔 input_getc()를 통해 최대 size만큼의 바이트를 읽어주고, 실제로 읽어들이는데 성공한 크기를 readsize로 리턴
+fd가 일반 파일에 해당하는 경우엔, filesys_lock 을 활용해 파일을 안전하게 읽어들이도록 함fd가 유효한 파일이면, read는 이 filesys_lock을 
+획득해 파일을 안전하게 읽어들이고, 다 읽으면 락을 해제
+*/
+/*
+read는, fd 에서 size 바이트만큼 읽어서 buffer에 저장해주는 함수
 */
 int read(int fd, void *buffer, unsigned size) {
-    check_address(buffer);
+    check_address(buffer); //유효성 검사
+	unsigned char *buf = buffer;
+	int readsize;
 
-    if (fd == 0) {
-        char *input = (char *)buffer; // void 포인터를 char 포인터로 캐스팅
-        *input = input_getc(); // 키보드 입력을 buffer에 저장
-        return 1;
-    } else {
-        // fd 값이 0이 아닌 경우, 에러를 나타내는 -1을 반환
-        return -1;
+	struct file *f = process_get_file(fd);
+
+	if (f == NULL) return -1;
+	if (f == STDOUT_FILENO) return -1;
+
+    if (fd == STDIN_FILENO) {
+		for(readsize=0; readsize<size; readsize++){
+		char c = input_getc();
+		*buf++ = c;
+		if (c =='\0');
+			break;
+			}
+		} 
+	else {
+		readsize = file_read(f, buffer,size);
     }
+	return readsize;
 }
-
-close (int fd) {
-	file_close(fd);
-}
-
 /*write는 buffer 에서 size바이트 만큼 읽어서 fd 파일에 써주는 함수*/
 /*
 buffer : 기록할 데이터를 저장한 버퍼의 주소값
 size : 기록할 데이터의 크기
 */
-int write(int fd, void *buffer, unsigned size)
+int write(int fd, const void* buffer, unsigned int size)
 {
 	check_address(buffer); //유효성 검사 -> write-bad-ptr 통과
+	struct file *f = process_get_file(fd);
+	int writesize;
 
-	if(fd==1)
+	if (f == NULL) return -1;
+	if (f == STDOUT_FILENO) return -1;
+
+	if(fd==STDIN_FILENO)
 	{
 		putbuf(buffer, size);//fd값이 1일때 버퍼에 저장된 데이터를 화면에 출력 (putbuf()이용)
-		return sizeof(buffer); //성공시 기록한 데이터의 바이트 수를 반환
+		writesize = size; //성공시 기록한 데이터의 바이트 수를 반환
 	}
 	else
-	{
-		return size;
+	{	lock_acquire(&filesys_lock);
+		writesize = file_write(f,buffer,size);
+		lock_release(&filesys_lock);
 	}
+	return writesize;
 }
 
-void seek(int fd, unsigned position)
-{
-	file_seek(fd, position);
-}
-
-
-// int open (const char *file) {
-// 	check_address(file); // 먼저 주소 유효한지 늘 체크
-// 	struct file *file_obj = filesys_open(file); // 열려고 하는 파일 객체 정보를 filesys_open()으로 받기
-// 	// 제대로 파일 생성됐는지 체크
-// 	if (file_obj == NULL) {
-// 		return -1;
-// 	}
-// 	//int fd = add_file_to_fd_table(file_obj); // 만들어진 파일을 스레드 내 fdt 테이블에 추가
-
-// 	// 만약 파일을 열 수 없으면] -1을 받음
-// 	if (fd == -1) {
-// 		file_close(file_obj);
-// 	}
-
-// 	return fd;
+// int write(int fd, const void* buffer, unsigned int size){
+//   if(fd==1){
+//     putbuf(buffer, size);
+//     return size;
+//   }
+//   return -1;
 // }
 
+/*
+seek은 fd에서 read하거나 write할 다음 위치를, position으로 변경해주는 함수
+seek 시스템콜은 이미 존재하는 함수인 file_seek호출
+*/
+void seek (int fd, unsigned position) {
+	struct file *f = process_get_file(fd);
+	if (f>2)
+		file_seek(f, position);
+}
+/*
+tell은, seek에서 조정해주는 fd의 pos를 그대로 가져오는 함수
+번호가 fd인 fdt로 열어준 파일에서, Read혹은 write 해줄 다음 위치를 리턴해줌
+파일 시작점 기준으로 byte 단위로 리턴해줌
+*/
+unsigned tell (int fd) {
+	struct file *f = process_get_file(fd);
+	if (f>2)
+		file_tell(f);
+}
+
+/*
+close는 fd에 해당하는 파일과 파일 디스크립터를 닫아주는 함수
+번호가 fd인 파일디스크립터를 닫아준다.
+fd에 해당하는 파일을 현재 실행중인 쓰레디의 fd테이블에서는 null로 바꿔 제거해주고
+file_close함수를 호출해서 해당 파일 자체를 닫아준다.
+*/
+void close (int fd){
+	struct file *f = process_get_file(fd);
+
+	if(f == NULL)
+		return;
+	if(fd < 2) return;
+    
+	process_close_file(fd);
+	file_close(f);
+}
 /*---------project2-----------*/
 /*
 		check_address 구현 
@@ -229,25 +291,53 @@ void check_address(void *addr)
 }
 
 
-/*
-파일 객체를 현재 돌고 있는 스레디프알 디스크립터 테이블에 추가해 슬드가 이 파일을 관리할 수 있도록 함.
-fd
-*/
-int add_file_to_fd_table(struct file *file) {
-	struct thread *t = thread_current();
-	struct file **fdt = t->file_dt;
-	int fd = t->fdidx; //fd값은 2부터 출발
-	
-	while (t->file_dt[fd] != NULL && fd < FDT_COUNT_LIMIT) {
-		fd++;
-	}
+/*------------파일 디스크립터 관련함수 ----------*/
 
-	if (fd >= FDT_COUNT_LIMIT) {
-		return -1;
-	}
-	t->fdidx = fd;
-	fdt[fd] = file;
-	return fd;
+/*프로세스의 파일 디스크립터 테이블을 검색하여 파일 객체의 주소를 리턴*/
+/*현재 실행중인 쓰레드의 파일 디스크립터 테이블의 fd에 NULL이 아니라 무언가가 들어있는지 확인해주는 함수*/
+// struct file *process_get_file(int fd){
+// 	if(fd<0 || fd>=FDT_COUNT_LIMIT)
+// 		return NULL;
+// 	struct file *f = thread_current() -> file_dt[fd];
+// 	return f;
+// }
+// struct file *process_get_file (int fd)
+// {
+// 	struct thread *curr = thread_current ();
+// 	if (fd < 0 || fd >= FDT_COUNT_LIMIT)
+// 		return NULL;
 
+// 	return curr->file_dt[fd];
+// }
+struct file *process_get_file (int fd){
+	if (fd < 0 || fd >= FDT_COUNT_LIMIT)
+		return NULL;
+	struct file *f = thread_current()->file_dt[fd];
+	return f;
 }
+/*
+현재 실행중인 쓰레드의 fd_table에서 주어진 파일 디스크립터(fd)를 NULL로 변경해 닫아주는 함수
+*/
+void process_close_file (int fd){
+	if(fd<0 || fd>=FDT_COUNT_LIMIT)
+		return NULL;
+	struct file *f = thread_current() -> file_dt[fd];
+	file_close(f);
+}
+/*
+파일 객체에 대한 파일 디스크립터 생성
+어떤 파일 구조체가 주어졌을 때, 현재 쓰레드의 fd_table에 빈 공간이 있는 경우, 거기에 f를 추가해주는 함수
+*/                      
+int process_add_file(struct file *f){
+	struct thread *curr = thread_current();
+	struct file **curr_fd_table = curr->file_dt;
 
+	for(int index = curr ->fdidx; index<FDT_COUNT_LIMIT; index++){
+		if(curr_fd_table[index] == NULL){
+			curr_fd_table[index] == NULL;
+			curr->fdidx-index;
+			return curr->fdidx;
+		}
+	}
+	return -1;
+}

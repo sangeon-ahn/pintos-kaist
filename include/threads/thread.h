@@ -28,8 +28,12 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/*
+새로운 스레드를 생성할 때 fdt를 위한 하나의 페이지를 할당해준다. 
+이때, 페이지의 크기는 (1<<12) 인데, 파일 구조체 주소 크기가 8바이트(1<<3)이므로 이를 분리하면 (1<<9)만큼의 공간을 할당받는 것과 같다.
+*/
 #define FDT_PAGES 3
-#define FDT_COUNT_LIMIT FDT_PAGES *(1<<9)
+#define FDT_COUNT_LIMIT FDT_PAGES *(1<<9) //128
 
 /* A kernel thread or user process.
  *

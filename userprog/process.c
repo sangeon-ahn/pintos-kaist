@@ -59,10 +59,10 @@ tid_t process_create_initd(const char *file_name)
 	strlcpy(fn_copy, file_name, PGSIZE);
 
 /*----------project2 --------파싱작업추가*/
-	// char token, *last;
-	// tid = strtok_r(file_name," ", &last);
+	char *token, *last;
+	token = strtok_r(file_name," ", &last);
 	// /* Create a new thread to execute FILE_NAME. */
-	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create(token, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
 	return tid;
@@ -173,13 +173,11 @@ error:
 	thread_exit();
 }
 
-/* Switch the current execution context to the f_name.
- * Returns -1 on fail. */
 int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
-	
+
 	char *token, *save_ptr;
 	int i = 0;
 	char *program_name;
@@ -203,8 +201,8 @@ int process_exec(void *f_name)
 	}
 	prg_argv[i] = NULL;
 
-	strlcpy(sub_filename, prg_argv[0], strlen(prg_argv[0])+1);
-	// printf("%s\n", sub_filename);
+	strlcpy(sub_filename, prg_argv[0], strlen(prg_argv[0]) + 1);
+	//printf("%s\n", sub_filename);
 	/* We first kill the current context */
 	process_cleanup();
 
@@ -212,7 +210,7 @@ int process_exec(void *f_name)
 	success = load(sub_filename, &_if);
 	ASSERT(success);
 	// load 다음에 USER_STACK 주소에 접근을 해야 올바른 접근이다.
-	
+
 	// // 1. 유저 스택에 인자값 자체 역순으로 넣기
 	uint64_t *temp_addr = (uint64_t *)USER_STACK;
 	for (int j = i - 1; j >= 0; j--)
@@ -226,15 +224,18 @@ int process_exec(void *f_name)
 	}
 
 	// 2. word-align 값 넣기(주소가 8의 배수(word: 8바이트)가 되도록 padding 넣기)
-	//SET_PTR(p, ptr) : p = 스택의 시작 주소, ptr :
+	// SET_PTR(p, ptr) : p = 스택의 시작 주소, ptr :
+	char *prev_addr = temp_addr;
 	temp_addr = (uint64_t *)((uintptr_t)(ALIGN_DOWN((uintptr_t)temp_addr)));
+	memset(temp_addr, 0, prev_addr - (char *)temp_addr);
 
 	// 3. 유저 스택에 인자값의 포인터 역순으로 넣기
-	for (int j = i; j >= 0 ; j --){
+	for (int j = i; j >= 0; j--)
+	{
 		temp_addr = temp_addr - 1;
 		memcpy(temp_addr, &prg_argv[j], sizeof(void *));
 	}
-	
+
 	// 4. 가짜 리턴 어드레스 넣기
 	temp_addr -= 1;
 	memset(temp_addr, 0, sizeof(void *));
@@ -250,19 +251,13 @@ int process_exec(void *f_name)
 	if (!success)
 		return -1;
 
-	hex_dump(_if.rsp, _if.rsp, (char *)USER_STACK - (char *)temp_addr, true);
+	//hex_dump(_if.rsp, _if.rsp, (char *)USER_STACK - (char *)temp_addr, true);
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)temp_addr, true);
 	/* Start switched process. */
 
 	do_iret(&_if);
 	NOT_REACHED();
 }
-// 유저 스택에 프로그램 이름과 인자들을 저장하는 함수
-// parse: 프로그램 이름과 인자가 저장되어 있는 메모리 공간, count:인자의 개수, esp:스택 포인터를 가리키는 주소
-void argument_stack(char **parse, int count, void **esp)
-{
-}
-
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
  * exception), returns -1.  If TID is invalid or if it was not a

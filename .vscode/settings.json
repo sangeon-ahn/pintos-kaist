@@ -20,6 +20,7 @@
         "system_error": "c",
         "type_traits": "c",
         "tuple": "c",
-        "utility": "c"
+        "utility": "c",
+        "synch.h": "c"
     }
 }
