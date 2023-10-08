@@ -198,7 +198,7 @@ tid_t thread_create(const char *name, int priority,
 	struct thread *t;
 	tid_t tid;
 	struct thread *parent = thread_current();
-	struct child_info *new_child_info = malloc(sizeof(struct child_info));
+
 	//function 인자는 thread가 생성되고 이 스레드가 시작할때 실행할 함수이다.
 	ASSERT(function != NULL); //유효한 함수 포인터를 가리키고 있어야 한다
 
@@ -206,11 +206,11 @@ tid_t thread_create(const char *name, int priority,
 	t = palloc_get_page(PAL_ZERO); // 페이지 할당받아서 스레드를 가리키게 만든다.
 	if (t == NULL)
 		return TID_ERROR;
-
+	
 	/* Initialize thread. */
 	init_thread(t, name, priority); //할당받은 우선순위로 init해준다
 	tid = t->tid = allocate_tid();
-
+	list_push_back(&parent -> child_list, &t->c_elem);
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument.
 	 rip : 명령어가 현재 실행되는 곳의 포인터*/
@@ -224,8 +224,7 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.eflags = FLAG_IF;
 	//부모 프로세스를 현재 생성된 프로세스의 구조체에 저장해준다
 	//부모 프로세스는 현재 러닝중인 스레드인가?? -> 맞다!
-	list_push_back(&parent -> child_list, &t->c_elem);
-	list_push_back(&parent -> child_info_list, &new_child_info->i_elem);
+	
 
 	if(t->tid == 1){
 		t->parent_p = NULL;

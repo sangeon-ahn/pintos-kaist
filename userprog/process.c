@@ -94,7 +94,7 @@ struct semaphore fork_wait;
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
 	struct thread *curr = thread_current();
-	memcpy(&curr->tf_for_syscall, if_, sizeof(struct intr_frame));
+	memcpy(&curr->parent_if, if_, sizeof(struct intr_frame));
 	// prt_if = if_;
 	/* Clone current thread to new thread.*/
 	// _do_fork의 인자로 현재 부모 프로세스(쓰레드)가 들어감
@@ -180,7 +180,7 @@ __do_fork(void *aux)
 	// struct intr_frame *parent_if = &prt_if;
 	bool succ = true;
 	/* 1. Read the cpu context to local stack. */
-	memcpy(&if_, &parent->tf_for_syscall, sizeof(struct intr_frame));
+	memcpy(&if_, &parent->parent_if, sizeof(struct intr_frame));
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
@@ -747,10 +747,7 @@ struct thread *get_child_with_pid(int tid)
 
 	struct thread *cur = thread_current();
 	struct list *child_list = &cur->child_list;
-
-#ifdef DEBUG_WAIT
-	printf("\npratent children # : %d\n", list_size(child_list));
-#endif
+	
 	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, c_elem);
