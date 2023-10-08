@@ -80,9 +80,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		thread_exit();
 		break;
 	case SYS_FORK:      
-		//1.thread_name 이라는 이름을 가진 현재 프로세스의 복제본인 새 프로세스를 만든다
-
-		//2.자식 프로세스의 pid를 반환해야 한다.
+		struct thread *cur = thread_current();
+		memcpy(&cur->parent_if, f, sizeof(struct intr_frame));
 		break;
 	case SYS_EXEC:      
 		

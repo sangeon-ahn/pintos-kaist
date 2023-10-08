@@ -99,12 +99,27 @@ struct thread {
 	struct list lock_list;
 	int64_t thread_tick_count;
 	/*-------------------project2------------------------------*/
-	struct list child_list;				//fork 할때마다 child 리스트에 추가가 되는건지, 정렬해야하는지, child list의 child에도 우선순위가 있는지
-	int creat_flag;						//성공적으로 자식 프로세스를 생성시켰는지 확인하는 플래그
-	int exit_status;					//프로그램의 종료 상태를 나타내는 멤버
-	struct thread *parent_p;			//부모 프로세스 디스크립터 포인터 필드
-	struct file *fdt[128];				//file 정보 file -> inode. open_cnt
-	int next_fd;						//다음 파일 디스크립터 정보(number) 1씩 증가
+	struct list child_list;             /* 자식 프로세스를 담아줄 리스트*/ //변경사항
+	struct list_elem child_elem;		/* child_list 에 담아줄 elem */ // 변경사항
+
+	struct semaphore wait_sema;			/* wait_sema 를 이용하여 자식 프로세스가 종료할때까지 대기함. 종료 상태를 저장 */
+	int exit_status;                    /* system call : exit , wait */ //변경사항
+
+	struct intr_frame parent_if;         /* 유저 스택의 정보를 인터럽트 프레임 안에 넣어서, 커널 스택으로 넘겨주기 위함 */ //변경사항 - 자식에게 넘겨줄 intr_frame
+	struct semaphore fork_sema;          /* 자식 프로세스를 정상적으로 로드하기 위해, 부모 프로세스가 sema_down/up하게 되는 세마포어 */ //fork가 완료될때 까지 부모가 기다리게 하는 forksema
+	struct semaphore free_sema;			 /*자식 프로세스 종료상태를 부모가 받을때까지 종료를 대기하게 하는 free_sema */
+	
+	// 변경사항
+	/* file descriptor 관련 추가 */
+	struct file **fd_table;             /* File Descriptor Table (FD Table) */
+	int fd_idx;                          /* File Descriptor Index (FD Idx) */
+
+	/* project 2 extra */
+    int stdin_count;
+    int stdout_count;
+
+    // /* 현재 실행 중인 파일 */
+    struct file *running;                 //denying writes to executable
 
 
 #ifdef USERPROG
