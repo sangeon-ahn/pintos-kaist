@@ -789,6 +789,7 @@ int process_add_file(struct file *f)
 }
 
 struct thread *get_child_with_pid(int tid){
+	
 	struct thread *cur = thread_current();
 	struct list *child_list = &cur->child_list;
 

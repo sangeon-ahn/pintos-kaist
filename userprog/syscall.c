@@ -193,8 +193,8 @@ int write_(int fd, void *buffer, unsigned size)
 // 	//메모리 탑재 성공시 유저 프로그램 실행, 실패시 스레드 종료
 // }
 
-struct file *fd_to_struct_filep(int d){
-	if(fd < 0 || fd >= FDCOUNT_LIMIT) {
-		return NULL;
-	}
-}
+// struct file *fd_to_struct_filep(int d){
+// 	if(fd < 0 || fd >= FDCOUNT_LIMIT) {
+// 		return NULL;
+// 	}
+// }
