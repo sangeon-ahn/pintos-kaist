@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "filesys/file.h" 
+#include "/home/ubuntu/pintos-kaist/include/threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -27,6 +29,11 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* ------------------ project2 -------------------- */
+#define FDT_PAGES 3		/* pages to allocate for file descriptor tables (thread_create, process_exit) */
+#define FDCOUNT_LIMIT FDT_PAGES *(1 << 9)		/* limit fd_idx */
+/* ------------------------------------------------ */
 
 /*
 새로운 스레드를 생성할 때 fdt를 위한 하나의 페이지를 할당해준다. 
@@ -121,11 +128,18 @@ struct thread {
 	int64_t thread_tick_count;
 	/* 쓰레드 디스크립터 필드 추가 */
 
-	/*------project2------*/
-	int exit_status; //exit(), wait()할때 사용
-	struct file **file_dt; //파일 디스크립터 테이블
-	int fdidx; //해당 파일에 대한 인덱스 값을 넣기 위한 용도
-	
+	/* ---------- Project 2 ---------- */
+	int exit_status;	 	/* to give child exit_status to parent */
+	int fd_idx;                     /* for open file's fd in fd_table */
+	struct intr_frame parent_if;	/* Information of parent's frame */
+	struct list child_list; /* list of threads that are made by this thread */
+	struct list_elem child_elem; /* elem for this thread's parent's child_list */
+	struct semaphore fork_sema; /* parent thread should wait while child thread copy parent */
+	struct semaphore wait_sema;
+	struct semaphore free_sema;
+	struct file **fd_table;   /* allocated in thread_create */	
+	struct file *running;
+	/* ------------------------------- */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -204,4 +218,7 @@ bool thread_compare_priority (struct list_elem *a, struct list_elem *b, void *au
 void refresh_priority (void);
 void remove_with_lock (struct lock *lock);
 
+/* ------------------- project 2 -------------------- */
+struct thread* get_child_by_tid(tid_t tid);
+/* -------------------------------------------------- */
 #endif /* threads/thread.h */

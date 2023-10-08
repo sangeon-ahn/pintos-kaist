@@ -210,7 +210,6 @@ void make_thread_wakeup(int64_t ticks)
 			thread_unblock(t);
 		}
 	}
-		
 
 static bool
 tick_less(const struct list_elem *a_, const struct list_elem *b_,
@@ -221,6 +220,10 @@ tick_less(const struct list_elem *a_, const struct list_elem *b_,
 
 	return a->thread_tick_count < b->thread_tick_count;
 }
+
+/* ------------------- project 2 -------------------- */
+struct thread* get_child_by_tid(tid_t tid);
+/* -------------------------------------------------- */
 
 /* Prints thread statistics. */
 void
@@ -518,6 +521,16 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_on_lock = NULL;//스레득 대기 중인 락 초기화
 	list_init (&t->donations); // 도네이션 리스트 초기화. list_init => head<->tail
 
+		/* -------- Project 2 ----------- */
+	t->exit_status = 0;
+	list_init(&t->child_list);
+	sema_init(&t->fork_sema, 0);
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->free_sema, 0);
+
+	t->running = NULL;
+	/* ------------------------------ */
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -779,3 +792,15 @@ void thread_preemption (void){
         thread_yield ();
 }
 
+/* --------------------- project 2 ------------------------ */
+struct thread * get_child_by_tid(int pid){
+	struct thread *curr = thread_current(); // 부모 쓰레드
+	struct list *curr_child_list = &curr->child_list; // 부모의 자식 리스트
+	struct list_elem *e;
+	for (e = list_begin(curr_child_list); e != list_end(curr_child_list); e = list_next(e)){
+		struct thread *now = list_entry(e, struct thread, child_elem);
+		if (now->tid == pid)
+			return now;
+	}
+	return NULL;
+}
