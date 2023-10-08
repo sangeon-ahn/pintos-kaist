@@ -30,6 +30,7 @@ int _open(const char *file);
 int _filesize(int fd);
 int _read(int fd, void *buffer, unsigned size);
 int _write(int fd, const void *buffer, unsigned size);
+int _wait(tid_t pid);
 // int _write (int fd UNUSED, const void *buffer, unsigned size);
 void _seek(int fd, unsigned position);
 unsigned _tell(int fd);
@@ -47,6 +48,7 @@ void process_close_file(int fd);
 /* Project2-extra */
 const int STDIN = 1;
 const int STDOUT = 2;
+struct lock filesys_lock;
 
 /* System call.
  *
@@ -141,7 +143,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 				_exit(-1);
 			break;
 		case SYS_WAIT:                   /* Wait for a child process to die. */
-			f->R.rax = wait(f->R.rdi);
+			f->R.rax = _wait(f->R.rdi);
 			break;
 		case SYS_CREATE:                 /* Create a file. */
 			f->R.rax = _create(f->R.rdi, f->R.rsi);
@@ -222,8 +224,8 @@ int _exec (const char *file){
 }
 
 /* Wait for a child process to die. */
-int wait(tid_t pid){
-	process_wait(pid);
+int _wait(tid_t pid){
+	return process_wait(pid);
 }
 
  /* Create a file. */

@@ -254,7 +254,11 @@ thread_create (const char *name, int priority,
 
 	/* after the unblocked thread added to ready list, check if current thread is still the thread with highest priority. 
 	   (check if new inserted thread has higher priority than current one) */
-	check_curr_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 
+	check_curr_max_priority();
+	// if (thread_current()->priority < t->priority) {
+	// 	thread_yield();
+	// }
+	// check_curr_max_priority(); // alarm-priority, priority-fifo/preempt 관련 변경 
 
 	return tid;
 }
@@ -438,13 +442,15 @@ thread_get_priority (void) {
 /* check if current thread is still the highest priority thread. if not, yield. */
 void 
 check_curr_max_priority(void){
+	if (!intr_context() && !list_empty (&ready_list) && thread_current ()->priority < list_entry (list_front (&ready_list), struct thread, elem)->priority)
+        thread_yield ();
 	// 검증중 // 되네
 	// alarm-priority, priority-fifo/preempt 관련 변경 // checking list_empty is necessary (if not, list_front: ASSERT (!list_empty (list)); FAILS and return debug-panic)
-	if (!list_empty(&ready_list) && thread_get_priority() < list_entry(list_front(&ready_list), struct thread, elem)->priority) // empty 확인 필요없이 begin으로만 해주면 가능. empty+front는?
-		thread_yield();
+	// if (!list_empty(&ready_list) && thread_get_priority() < list_entry(list_front(&ready_list), struct thread, elem)->priority) // empty 확인 필요없이 begin으로만 해주면 가능. empty+front는?
+	// 	thread_yield();
 
-	//되는거
-	// alarm-priority, priority-fifo/preempt 관련 변경 
+	// //되는거
+	// // alarm-priority, priority-fifo/preempt 관련 변경 
 	// if (thread_get_priority() < list_entry(list_begin(&ready_list), struct thread, elem)->priority) // empty 확인 필요없이 begin으로만 해주면 가능. empty+front는?
 	// 	thread_yield();
 }

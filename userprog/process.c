@@ -234,7 +234,7 @@ __do_fork (void *aux) {
 error:
 	current->exit_status = TID_ERROR; // 없어도될듯? 실험
 	sema_up(&current->fork_sema);
-	exit(TID_ERROR);
+	_exit(TID_ERROR);
 	// thread_exit ();
 }
 
@@ -357,7 +357,7 @@ process_exit (void) {
 	// 	process_close_file(i);
 	// }
 	for (int i = 0; i < FDCOUNT_LIMIT; i++){ //curr->fd_idx 까지만 해도 가능할듯
-		close(i);
+		_close(i);
 	}
 
 	// curr->fd_idx = 2;
